@@ -48,6 +48,13 @@ func (s *Service) buildKeyURL(entitySet, key string) string {
 	return s.servicePath + entitySet + key
 }
 
+func (s *Service) buildNavigationURL(entitySet, key, navProperty string) string {
+	if !strings.HasPrefix(key, "(") {
+		key = "(" + key + ")"
+	}
+	return s.servicePath + entitySet + key + "/" + navProperty
+}
+
 // GetEntitySet fetches a collection of entities
 func GetEntitySet[T any](s *Service, entitySet string, opts *QueryOptions) (*models.ODataResponse[[]T], error) {
 	url := s.buildURL(entitySet)
@@ -91,6 +98,32 @@ func GetEntityByKey[T any](s *Service, entitySet, key string, opts *QueryOptions
 	}
 
 	var result models.ODataResponse[T]
+	if err := json.Unmarshal(resp.Body(), &result); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// GetNavigationSet fetches a collection of related entities via a navigation property.
+// Example URL: EntitySet('key')/NavigationProperty
+func GetNavigationSet[T any](s *Service, entitySet, key, navProperty string, opts *QueryOptions) (*models.ODataResponse[[]T], error) {
+	url := s.buildNavigationURL(entitySet, key, navProperty)
+	var qParams map[string]string
+	if opts != nil {
+		qParams = opts.Build()
+	}
+
+	resp, err := s.client.ExecuteRequest(http.MethodGet, url, nil, qParams)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.IsError() {
+		return nil, parseError(resp.Body())
+	}
+
+	var result models.ODataResponse[[]T]
 	if err := json.Unmarshal(resp.Body(), &result); err != nil {
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}

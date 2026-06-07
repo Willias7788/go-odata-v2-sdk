@@ -7,6 +7,7 @@ A generic, production-ready Go SDK for consuming SAP OData v2.0 services. This l
 - **Generic & Reusable**: Not tied to any specific SAP module. Works with any compliant OData v2 service.
 - **CSRF Token Management**: Automatically handles `X-CSRF-Token` fetching, caching, and retries for `POST`, `PUT`, `PATCH`, and `DELETE` operations.
 - **Fluent Query Builder**: Easily construct complex OData queries with `$filter`, `$select`, `$expand`, `$top`, `$skip`, and `$orderby`.
+- **Navigation Properties**: Traverse related entity sets via OData navigation properties (e.g., `EntitySet('key')/NavProperty`).
 - **Type-Safe**: Uses Go generics for strict typing of response entities.
 - **Configurable**: Supports configuration via environment variables or `.env` file (using Viper).
 - **Resilient**: Built on top of [go-resty](https://github.com/go-resty/resty) for robust HTTP communication.
@@ -116,7 +117,40 @@ if err != nil {
 log.Printf("Created: %s", resp.D.Result.ID)
 ```
 
-### 5. Update Entity (PUT/PATCH)
+### 5. Navigate to Related Entities (Navigation Property)
+
+Use `GetNavigationSet` to traverse OData navigation properties. This builds a URL like `EntitySet('key')/NavigationProperty`.
+
+```go
+// Define the related entity struct
+type TransferOrder struct {
+	DO_NUM  string `json:"DO_NUM"`
+	DO_DATE string `json:"DO_DATE"`
+	TO_NUM  string `json:"TO_NUM"`
+	TO_DATE string `json:"TO_DATE"`
+	SO_NUM  string `json:"SO_NUM"`
+	SO_DATE string `json:"SO_DATE"`
+}
+
+// Fetch transfer orders linked to a delivery order
+// URL: DeliveryOrderSet('8120010348')/toTransferOrder
+resp, err := odata.GetNavigationSet[TransferOrder](
+	service,
+	"DeliveryOrderSet",
+	"('8120010348')",
+	"toTransferOrder",
+	nil,
+)
+if err != nil {
+	log.Fatal(err)
+}
+
+for _, to := range resp.D.Result {
+	log.Printf("DO: %s → TO: %s → SO: %s\n", to.DO_NUM, to.TO_NUM, to.SO_NUM)
+}
+```
+
+### 6. Update Entity (PUT/PATCH)
 
 ```go
 newProduct.Name = "Antigravity Boots V2"
