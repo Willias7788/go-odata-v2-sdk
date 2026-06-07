@@ -150,6 +150,28 @@ for _, to := range resp.D.Result {
 }
 ```
 
+**Deep Inserts / Creating Related Entities (POST)**
+
+If your OData service supports creating a related entity (or a deep insert) via a navigation property, you can use `CreateNavigationEntity`.
+
+```go
+// Create a new related entity via POST EntitySet('key')/NavigationProperty
+newTransferOrder := TransferOrder{
+	// ... populate fields
+}
+
+createdResp, err := odata.CreateNavigationEntity[TransferOrder](
+	service,
+	"DeliveryOrderSet",
+	"('8120010348')",
+	"toTransferOrder",
+	newTransferOrder,
+)
+if err != nil {
+	log.Fatal("Create related entity failed:", err)
+}
+```
+
 ### 6. Update Entity (PUT/PATCH)
 
 ```go

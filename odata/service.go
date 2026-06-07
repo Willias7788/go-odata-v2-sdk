@@ -131,6 +131,28 @@ func GetNavigationSet[T any](s *Service, entitySet, key, navProperty string, opt
 	return &result, nil
 }
 
+// CreateNavigationEntity creates a new related entity via a navigation property (POST).
+// Example URL: POST EntitySet('key')/NavigationProperty
+func CreateNavigationEntity[T any](s *Service, entitySet, key, navProperty string, payload interface{}) (*models.ODataResponse[T], error) {
+	url := s.buildNavigationURL(entitySet, key, navProperty)
+	
+	resp, err := s.client.ExecuteRequest(http.MethodPost, url, payload, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.IsError() {
+		return nil, parseError(resp.Body())
+	}
+
+	var result models.ODataResponse[T]
+	if err := json.Unmarshal(resp.Body(), &result); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+
+	return &result, nil
+}
+
 // CreateEntity creates a new entity
 func CreateEntity[T any](s *Service, entitySet string, payload interface{}) (*models.ODataResponse[T], error) {
 	url := s.buildURL(entitySet)
