@@ -28,7 +28,7 @@ func NewSAPClient(baseURL, username, password string) *SAPClient {
 	r := resty.New()
 	r.SetBaseURL(baseURL)
 	r.SetBasicAuth(username, password)
-	
+
 	// Set default timeouts and headers
 	r.SetTimeout(time.Second * 30)
 	r.SetHeader("Accept", "application/json")
@@ -63,7 +63,7 @@ func (s *SAPClient) ExecuteRequest(method, url string, body interface{}, queryPa
 	// If we anticipate needing a token but don't have one, fetch it now to save a round trip failure.
 	// However, standard flow is: Try -> Fail -> Fetch -> Retry
 	// We'll optimistically try if we have a token, or if it's GET (doesn't need one usually).
-	
+
 	req := s.buildRequest()
 	if body != nil {
 		req.SetBody(body)
@@ -76,7 +76,7 @@ func (s *SAPClient) ExecuteRequest(method, url string, body interface{}, queryPa
 	s.mu.RLock()
 	token := s.csrfToken
 	s.mu.RUnlock()
-	
+
 	if token != "" {
 		req.SetHeader(CSRFHeader, token)
 	}
@@ -91,7 +91,7 @@ func (s *SAPClient) ExecuteRequest(method, url string, body interface{}, queryPa
 	// We detect need for refresh if 403 AND we tried a mutating method.
 	if isMutating && (resp.StatusCode() == http.StatusForbidden || resp.Header().Get(CSRFHeader) == "Required") {
 		// Log or Debug: "CSRF token invalid or missing, refreshing..."
-		if err := s.RefreshCSRFToken(); err != nil {
+		if err := s.RefreshCSRFToken(url); err != nil {
 			return nil, fmt.Errorf("failed to refresh CSRF token: %w", err)
 		}
 
@@ -103,13 +103,13 @@ func (s *SAPClient) ExecuteRequest(method, url string, body interface{}, queryPa
 		if len(queryParams) > 0 {
 			reqRetry.SetQueryParams(queryParams)
 		}
-		
+
 		s.mu.RLock()
 		newToken := s.csrfToken
 		s.mu.RUnlock()
-		
+
 		reqRetry.SetHeader(CSRFHeader, newToken)
-		
+
 		resp, err = reqRetry.Execute(method, url)
 	}
 
@@ -120,9 +120,9 @@ func (s *SAPClient) ExecuteRequest(method, url string, body interface{}, queryPa
 func (s *SAPClient) buildRequest() *resty.Request {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	req := s.client.R()
-	// Resty automatically manages cookies in its built-in CookieJar if enabled, 
+	// Resty automatically manages cookies in its built-in CookieJar if enabled,
 	// but we might want explicit control if we reset the jar or want to persist generic session cookies manually.
 	// For now, let's trust Resty's JAR for session cookies, but valid X-CSRF-Token often requires specific cookies to accompany it.
 	// If we manually captured cookies during Fetch, we set them here.
@@ -133,22 +133,23 @@ func (s *SAPClient) buildRequest() *resty.Request {
 }
 
 // RefreshCSRFToken fetches a new token and updates the client state
-func (s *SAPClient) RefreshCSRFToken() error {
+func (s *SAPClient) RefreshCSRFToken(fetchUrl string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Use HEAD or GET to valid endpoint. Service Root "/" is standard.
+	// We use the dynamically provided fetchUrl to fetch the token.
 	req := s.client.R().
 		SetHeader(CSRFHeader, CSRFValue)
 
-	resp, err := req.Head("/") // or GET
+	resp, err := req.Head(fetchUrl) // Hit the dynamic URL
 	if err != nil {
 		return err
 	}
 
 	if resp.IsError() {
 		// Fallback to GET if HEAD fails
-		resp, err = req.Get("/")
+		resp, err = req.Get(fetchUrl)
 		if err != nil {
 			return err
 		}
@@ -164,7 +165,7 @@ func (s *SAPClient) RefreshCSRFToken() error {
 
 	s.csrfToken = token
 	s.csrfCookies = resp.Cookies() // Capture cookies explicitly e.g. SAP_SESSIONID
-	
+
 	return nil
 }
 
